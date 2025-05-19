@@ -2,7 +2,7 @@ import os
 import csv
 from flask import (
     Flask, render_template, redirect, url_for,
-    request, flash, session
+    request, flash, session, send_file, abort
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -16,7 +16,6 @@ USER_CSV = os.path.join(app.instance_path, 'users.csv')
 
 # --- Helper Functions ---
 def read_users():
-    """Read users from CSV into a list of dicts."""
     users = []
     if os.path.exists(USER_CSV):
         with open(USER_CSV, newline='') as f:
@@ -27,7 +26,6 @@ def read_users():
 
 
 def write_user(username, password_hash):
-    """Append a new user to the CSV."""
     file_exists = os.path.exists(USER_CSV)
     with open(USER_CSV, 'a', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=['username','password_hash'])
@@ -37,7 +35,6 @@ def write_user(username, password_hash):
 
 
 def find_user(username):
-    """Return user dict or None."""
     for user in read_users():
         if user['username'] == username:
             return user
@@ -45,7 +42,6 @@ def find_user(username):
 
 # --- Create default admin if missing ---
 if not find_user('admin'):
-    # Password is 'comp2801'
     admin_hash = generate_password_hash('comp2801')
     write_user('admin', admin_hash)
 
@@ -87,6 +83,25 @@ def logout():
     session.pop('username', None)
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
+
+# --- Admin Dashboard & CSV Download ---
+@app.route('/admin')
+def admin_dashboard():
+    if session.get('username') != 'admin':
+        abort(403)
+    users = read_users()
+    return render_template('admin.html', users=users)
+
+@app.route('/admin/download')
+def download_users():
+    if session.get('username') != 'admin':
+        abort(403)
+    if not os.path.exists(USER_CSV):
+        abort(404)
+    return send_file(USER_CSV,
+                     mimetype='text/csv',
+                     as_attachment=True,
+                     download_name='users.csv')
 
 if __name__ == '__main__':
     app.run()
