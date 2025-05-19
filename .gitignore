@@ -1,5 +1,5 @@
 __pycache__/
 *.pyc
-instance/app.db
+instance/users.csv
 venv/
 .env
