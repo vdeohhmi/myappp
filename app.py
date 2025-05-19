@@ -1,87 +1,179 @@
 import os
-from flask import Flask, render_template, redirect, url_for, request, flash
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import (
-    LoginManager, login_user, logout_user,
-    login_required, current_user, UserMixin
+import csv
+from flask import (
+    Flask, render_template, redirect, url_for,
+    request, flash, session
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from config import Config
 
 # --- App Setup ---
-app = Flask(__name__, instance_relative_config=True)
-app.config.from_object(Config)
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')
 
-# ensure instance folder exists
+# Ensure instance folder exists
 os.makedirs(app.instance_path, exist_ok=True)
+USER_CSV = os.path.join(app.instance_path, 'users.csv')
 
-db = SQLAlchemy(app)
-login_manager = LoginManager(app)
-login_manager.login_view = 'login'
+# --- Helper Functions ---
+def read_users():
+    """Read users from CSV into a list of dicts."""
+    users = []
+    if os.path.exists(USER_CSV):
+        with open(USER_CSV, newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                users.append(row)
+    return users
 
-# --- User Model ---
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
 
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+def write_user(username, password_hash):
+    """Append a new user to the CSV."""
+    file_exists = os.path.exists(USER_CSV)
+    with open(USER_CSV, 'a', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=['username','password_hash'])
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({'username': username, 'password_hash': password_hash})
 
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
 
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+def find_user(username):
+    """Return user dict or None."""
+    for user in read_users():
+        if user['username'] == username:
+            return user
+    return None
+
+# --- Create default admin if missing ---
+if not find_user('admin'):
+    # Password is 'comp2801'
+    admin_hash = generate_password_hash('comp2801')
+    write_user('admin', admin_hash)
 
 # --- Routes ---
 @app.route('/')
 def index():
-    return render_template('index.html')
+    user = session.get('username')
+    return render_template('index.html', user=user)
 
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/register', methods=['GET','POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
+        username = request.form['username'].strip()
         password = request.form['password']
-        if User.query.filter_by(username=username).first():
+        if find_user(username):
             flash('Username already exists', 'warning')
         else:
-            user = User(username=username)
-            user.set_password(password)
-            db.session.add(user)
-            db.session.commit()
-            flash('Registration successful – please log in.', 'success')
+            pw_hash = generate_password_hash(password)
+            write_user(username, pw_hash)
+            flash('Registration successful! Please log in.', 'success')
             return redirect(url_for('login'))
     return render_template('register.html')
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET','POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        username = request.form['username'].strip()
         password = request.form['password']
-        user = User.query.filter_by(username=username).first()
-        if user and user.check_password(password):
-            login_user(user)
+        user = find_user(username)
+        if user and check_password_hash(user['password_hash'], password):
+            session['username'] = username
             flash('Logged in successfully.', 'success')
             return redirect(url_for('index'))
         flash('Invalid username or password.', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
-@login_required
 def logout():
-    logout_user()
+    session.pop('username', None)
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
 
-# --- CLI: Initialize DB ---
-@app.cli.command('init-db')
-def init_db():
-    """Create the database tables."""
-    db.create_all()
-    print('Database initialized.')
+if __name__ == '__main__':
+    app.run()
+```python
+import os
+import csv
+from flask import (
+    Flask, render_template, redirect, url_for,
+    request, flash, session
+)
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# --- App Setup ---
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')
+
+# Ensure instance folder exists
+os.makedirs(os.path.join(app.instance_path), exist_ok=True)
+USER_CSV = os.path.join(app.instance_path, 'users.csv')
+
+# --- Helper Functions ---
+def read_users():
+    """Read users from CSV into a list of dicts."""
+    users = []
+    if os.path.exists(USER_CSV):
+        with open(USER_CSV, newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                users.append(row)
+    return users
+
+
+def write_user(username, password_hash):
+    """Append a new user to the CSV."""
+    file_exists = os.path.exists(USER_CSV)
+    with open(USER_CSV, 'a', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=['username','password_hash'])
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({'username': username, 'password_hash': password_hash})
+
+
+def find_user(username):
+    """Return user dict or None."""
+    for user in read_users():
+        if user['username'] == username:
+            return user
+    return None
+
+# --- Routes ---
+@app.route('/')
+def index():
+    user = session.get('username')
+    return render_template('index.html', user=user)
+
+@app.route('/register', methods=['GET','POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username'].strip()
+        password = request.form['password']
+        if find_user(username):
+            flash('Username already exists', 'warning')
+        else:
+            pw_hash = generate_password_hash(password)
+            write_user(username, pw_hash)
+            flash('Registration successful! Please log in.', 'success')
+            return redirect(url_for('login'))
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username'].strip()
+        password = request.form['password']
+        user = find_user(username)
+        if user and check_password_hash(user['password_hash'], password):
+            session['username'] = username
+            flash('Logged in successfully.', 'success')
+            return redirect(url_for('index'))
+        flash('Invalid username or password.', 'danger')
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run()
