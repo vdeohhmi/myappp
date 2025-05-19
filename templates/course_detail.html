@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}{{ course.title }}{% endblock %}
+{% block content %}
+<h2>{{ course.title }}</h2>
+<p>{{ course.description }}</p>
+<form method="post" action="{{ url_for('update_progress',id=course.id) }}">
+  <label for="progress">Progress: {{ progress }}%</label>
+  <input type="range" class="form-range" min="0" max="100" id="progress" name="progress" value="{{ progress }}">
+  <button type="submit" class="btn btn-success mt-2">Update Progress</button>
+</form>
+{% endblock %}
