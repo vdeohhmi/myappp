@@ -7,6 +7,4 @@ services:
     envVars:
       - key: SECRET_KEY
         value: b6cf73addb96d35f02abc59284d0f09fa6e2031572894b97c826367abb25b71f
-      # Optional Postgres
-      - key: DATABASE_URL
-        value: postgres://user:pass@host:port/dbname
+ 
