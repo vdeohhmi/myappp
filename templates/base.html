@@ -9,20 +9,18 @@
 <body class="p-4">
   <nav class="mb-4">
     <a href="{{ url_for('index') }}" class="btn btn-outline-primary">Home</a>
-    {% if current_user.is_authenticated %}
+    {% if session.username %}
       <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">Logout</a>
     {% else %}
       <a href="{{ url_for('login') }}" class="btn btn-outline-success">Login</a>
       <a href="{{ url_for('register') }}" class="btn btn-outline-secondary">Register</a>
     {% endif %}
   </nav>
-
   {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-      <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% for category, msg in messages %}
+      <div class="alert alert-{{ category }}">{{ msg }}</div>
     {% endfor %}
   {% endwith %}
-
   {% block content %}{% endblock %}
 </body>
 </html>
